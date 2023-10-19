@@ -42,7 +42,7 @@ def bytes_to_int(bytes):
 
 def convertPMValues(value):
     string_value = str(hex(value)).replace("0x", "")
-
+    print(string_value)
     byte_value = bytes.fromhex(string_value)
 
     return struct.unpack('>f', byte_value)[0]

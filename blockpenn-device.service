@@ -1,0 +1,12 @@
+[Unit]
+Description=BlockPenn Device Script
+After=multi-user.target
+
+[Service]
+Type=simple
+Restart=always
+WorkingDirectory=/home/ubuntu/blockpenn-python
+ExecStart=/home/ubuntu/bpenv/bin/python3 /home/ubuntu/blockpenn-python/iot_sensor_publish_v2.py
+
+[Install]
+WantedBy=multi-user.target

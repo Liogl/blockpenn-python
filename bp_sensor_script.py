@@ -5,9 +5,12 @@ import board
 import adafruit_shtc3
 import Adafruit_SSD1306
 ## SPS30
-import sps30
+from SPS30 import sps30
 ## SPS30
-import DBSETUP  # import the db setup
+## T6713
+from T6713 import t6713
+## T6713
+import influxdb_utils
 
 from PIL import Image
 from PIL import ImageDraw
@@ -98,92 +101,7 @@ time.sleep(1)
 red_led.set_led(0)
 
 # T6713 start
-bus = 1
-addressT6713 = 0x15
-I2C_SLAVE=0x0703
 
-class i2c_6713(object):
-	def __init__(self, device, bus):
-
-		self.fr = io.open("/dev/i2c-"+str(bus), "rb", buffering=0)
-		self.fw = io.open("/dev/i2c-"+str(bus), "wb", buffering=0)
-
-		# set device address
-
-		fcntl.ioctl(self.fr, I2C_SLAVE, device)
-		fcntl.ioctl(self.fw, I2C_SLAVE, device)
-
-	def write(self, bytes):
-		self.fw.write(bytes)
-
-	def read(self, bytes):
-		return self.fr.read(bytes)
-
-	def close(self):
-		self.fw.close()
-		self.fr.close()
-
-class T6713(object):
-	def __init__(self):
-		self.dev = i2c_6713(addressT6713, bus)
-
-	def status(self):
-		logging.debug('Running function:'+inspect.stack()[0][3])
-		buffer = array.array('B', [0x04, 0x13, 0x8a, 0x00, 0x01])
-		self.dev.write(buffer)
-		time.sleep(0.1)
-		data = self.dev.read(4)
-		buffer = array.array('B', data)
-		return buffer[2]*256+buffer[3]
-
-	def send_cmd(self, cmd):
-		buffer = array.array('B', cmd)
-		self.dev.write(buffer)
-		time.sleep(0.01) # Technically minimum delay is 10ms 
-		data = self.dev.read(5)
-		buffer = array.array('B', data)
-		return buffer
-
-	def reset(self):
-		logging.debug('Running function:'+inspect.stack()[0][3])
-		buffer = array.array('B', [0x04, 0x03, 0xe8, 0x00, 0x01])
-		self.dev.write(buffer)
-		time.sleep(0.01)
-		data = self.dev.read(5)
-		buffer = array.array('B', data)
-		cmd_result = 1
-		if ((buffer[2] == 0xe8) & (buffer[3] == 0xff) & (buffer[4] == 0x00)): cmd_result = 0 
-		return buffer
-
-	def gasPPM(self):
-		logging.debug('Running function:'+inspect.stack()[0][3])
-		buffer = array.array('B', [0x04, 0x13, 0x8b, 0x00, 0x01])
-		self.dev.write(buffer)
-		time.sleep(0.1)
-		data = self.dev.read(4)
-		buffer = array.array('B', data)
-		ret_value = int((((buffer[2] & 0x3F) << 8) | buffer[3]))
-		logging.info("Read gasPPM ("+str(ret_value)+")")
-		return ret_value
-		#return buffer[2]*256+buffer[3]
-
-	def checkABC(self):
-		logging.debug('Running function:'+inspect.stack()[0][3])
-		buffer = array.array('B', [0x04, 0x03, 0xee, 0x00, 0x01])
-		self.dev.write(buffer)
-		time.sleep(0.1)
-		data = self.dev.read(4)
-		buffer = array.array('B', data)
-		return buffer[2]*256+buffer[3]
-
-	def calibrate(self):
-		logging.debug('Running function:'+inspect.stack()[0][3])
-		buffer = array.array('B', [0x05, 0x03, 0xec, 0xff, 0x00])
-		self.dev.write(buffer)
-		time.sleep(0.1)
-		data = self.dev.read(5)
-		buffer = array.array('B', data)
-		return buffer[3]*256+buffer[3]
 
 # T6713 end
 
@@ -232,44 +150,19 @@ sht = adafruit_shtc3.SHTC3(i2c)
 
 # Connect T6713
 ## T6713
-obj_6713 = T6713()
+obj_6713 = t6713.T6713()
 ## T6713
 
-# If Reset needed - uncomment
-# t6713_reset = obj.reset()
-# print("T6713 reset returned:")
-# print(','.join(format(x, '02x') for x in t6713_reset))
-
-# Prep the air quality sensor
 ## SPS30
-sps = sps30.SPS30(1)
-try:
-	if sps.read_article_code() == sps.ARTICLE_CODE_ERROR:
-		raise Exception("ARTICLE CODE CRC ERROR!")
-	else:
-		print("ARTICLE CODE: " + str(sps.read_article_code()))
-
-	if sps.read_device_serial() == sps.SERIAL_NUMBER_ERROR:
-		raise Exception("SERIAL NUMBER CRC ERROR!")
-	else:
-		print("DEVICE SERIAL: " + str(sps.read_device_serial()))
-
-	sps.set_auto_cleaning_interval(604800) # default 604800, set 0 to disable auto-cleaning
-
-	sps.device_reset() # device has to be powered-down or reset to check new auto-cleaning interval
-
-	if sps.read_auto_cleaning_interval() == sps.AUTO_CLN_INTERVAL_ERROR: # or returns the interval in seconds
-		raise Exception("AUTO-CLEANING INTERVAL CRC ERROR!")
-	else:
-		print("AUTO-CLEANING INTERVAL: " + str(sps.read_auto_cleaning_interval()))
-
-	sps.start_measurement()
-
-except Exception as e:
-	green_led.set_led(0)
-	GPIO.cleanup()
-	logging.exception("main crashed during SPS30 readout. Error: %s", e)
-## SPS30
+sps = sps30.SPS30()
+print(f'SPS30 Firmware Version: {sps.firmware_version()}')
+print(f'SPS30 Product Type: {sps.product_type()}')
+print(f'SPS30 Device Serial: {sps.serial_number()}')
+print(f"SPS30 Status Register: {sps.read_status_register()}")
+print(f'SPS30 Auto cleaning Interval: {sps.read_auto_cleaning_interval()}')
+sps.reset()
+time.sleep(1)
+sps.start_measurement()
 
 # Configure the display panel
 def showPanel(panel_id):
@@ -293,42 +186,43 @@ def showPanel(panel_id):
 ## T6713
 		if (panel_id == 2):
 			draw.text((x, top+8*1), "SENSORS: Air Quality",  font=font, fill=255)
-## SPS30
-			draw.text((x, top+8*2), str("PM1.0: %0.1f µg/m3" % sps.dict_values['pm1p0']),  font=font, fill=255)
-			draw.text((x, top+8*3), str("PM2.5: %0.1f µg/m3" % sps.dict_values['pm2p5']),  font=font, fill=255)
-			draw.text((x, top+8*4), str("PM10 : %0.1f µg/m3" % sps.dict_values['pm10p0']),  font=font, fill=255)
-			draw.text((x, top+8*5), str("NC1.0: %0.1f 1/cm3" % sps.dict_values['nc1p0']),  font=font, fill=255)
-			draw.text((x, top+8*6), str("NC4.0: %0.1f 1/cm3" % sps.dict_values['nc4p0']),  font=font, fill=255)
-			draw.text((x, top+8*7), str("Typical Particle: %0.1f µm" % sps.dict_values['typical']),  font=font, fill=255)
+			sps_values = json.dumps(sps.get_measurement(), indent=2)
+## SPS30	
+			draw.text((x, top+8*2), str("PM1.0: %0.1f µg/m3" % sps_values['sensor_data']['mass_density']['pm1.0']),  font=font, fill=255)
+			draw.text((x, top+8*3), str("PM2.5: %0.1f µg/m3" % sps_values['sensor_data']['mass_density']['pm2.5']),  font=font, fill=255)
+			draw.text((x, top+8*4), str("PM10 : %0.1f µg/m3" % sps_values['sensor_data']['mass_density']['pm10']),  font=font, fill=255)
+			draw.text((x, top+8*5), str("NC1.0: %0.1f 1/cm3" % sps_values['sensor_data']['particle_count']['pm1.0']),  font=font, fill=255)
+			draw.text((x, top+8*6), str("NC4.0: %0.1f 1/cm3" % sps_values['sensor_data']['particle_count']['pm4.0']),  font=font, fill=255)
+			draw.text((x, top+8*7), str("Typical Particle Size: %0.1f µm" % sps_values['sensor_data']['particle_size']),  font=font, fill=255)
 ## SPS30
 	except Exception as e:
 		green_led.set_led(0)
-		GPIO.cleanup()
+		# GPIO.cleanup()
 		logging.exception("main crashed during panel display. Error: %s", e)
 
-#		print ("PM4.0 Value in µg/m3: " + str(sps.dict_values['pm4p0']))
-#		print ("NC0.5 Value in 1/cm3: " + str(sps.dict_values['nc0p5']))    # NC: Number of Concentration 
-#		print ("NC2.5 Value in 1/cm3: " + str(sps.dict_values['nc2p5']))
-#		print ("NC10.0 Value in 1/cm3: " + str(sps.dict_values['nc10p0']))
-
 def saveResults():
-	DBSETUP.ganacheLogger(float(temperature), "Temperature", "C", "MAC_T", "unit_descrip", "SHTC3", "Sensirion")	
-	DBSETUP.ganacheLogger(float(relative_humidity), "Humidity", "%", "MAC_H", "unit_descrip", "SHTC3", "Sensirion")
-## T6713
-	DBSETUP.ganacheLogger(float(obj_6713.gasPPM()), "CO2 Concentration", "PPM", "MAC_CO2", "unit_descrip", "T6713", "Amphenol Advanced Sensors")
-	DBSETUP.ganacheLogger(float(obj_6713.checkABC()), "CO2 ABC State", " ", "MAC_CO2_ABC", "unit_descrip", "T6713", "Amphenol Advanced Sensors")
-## T6713
-## SPS30
-	DBSETUP.ganacheLogger(float(sps.dict_values['pm1p0']), "AQ_PM1.0", "µg/m3", "MAC_AQ_1", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['pm2p5']), "AQ_PM2.5", "µg/m3", "MAC_AQ_2", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['pm4p0']), "AQ_PM4", "µg/m3", "MAC_AQ_3", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['pm10p0']), "AQ_PM10", "µg/m3", "MAC_AQ_4", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['nc0p5']), "AQ_NC0_5", "1/cm3", "MAC_AQ_5", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['nc1p0']), "AQ_NC1", "1/cm3", "MAC_AQ_6", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['nc2p5']), "AQ_NC2_5", "1/cm3", "MAC_AQ_7", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['nc4p0']), "AQ_NC4", "1/cm3", "MAC_AQ_8", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['nc10p0']), "AQ_NC10", "1/cm3", "MAC_AQ_9", "unit_descrip", "SPS30", "Sensirion")
-	DBSETUP.ganacheLogger(float(sps.dict_values['typical']), "AQ_NC0_TYPICAL", "µm", "MAC_AQ_10", "unit_descrip", "SPS30", "Sensirion")
+    while True:
+        if sps.read_data_ready_flag():
+            break
+    sps_values = sps.get_measurement() #json.dumps(sps.get_measurement(), indent=2)
+    data = {
+        "Temperature" : float(temperature),
+        "Humidity" : float(relative_humidity),
+        "CO2 Concentration" : float(obj_6713.gasPPM()),
+        "CO2 ABC State" : float(obj_6713.checkABC()),
+        "AQ_PM1.0" : float(sps_values['sensor_data']['mass_density']['pm1.0']),
+        "AQ_PM2.5" : float(sps_values['sensor_data']['mass_density']['pm2.5']),
+        "AQ_PM4" : float(sps_values['sensor_data']['mass_density']['pm4.0']),
+        "AQ_PM10" : float(sps_values['sensor_data']['mass_density']['pm10']),
+        "AQ_NC0_5" : float(sps_values['sensor_data']['particle_count']['pm0.5']),
+        "AQ_NC1" : float(sps_values['sensor_data']['particle_count']['pm1.0']),
+        "AQ_NC2_5" : float(sps_values['sensor_data']['particle_count']['pm2.5']),
+        "AQ_NC4" : float(sps_values['sensor_data']['particle_count']['pm4.0']),
+        "AQ_NC10" : float(sps_values['sensor_data']['particle_count']['pm10']),
+        "AQ_NC0_TYPICAL" : float(sps_values['sensor_data']['particle_size'])
+    }
+    
+    influxdb_utils.influx_write(data)
 ## SPS30
 
 # Global vars
@@ -371,15 +265,10 @@ def main():
 		# Get measurements
 		temperature, relative_humidity = sht.measurements
 ## SPS30
-		logging.debug('Reading SPS30 data')
-		try: 
-			if not sps.read_data_ready_flag():
-				if sps.read_data_ready_flag() == sps.DATA_READY_FLAG_ERROR:
-					raise Exception("DATA-READY FLAG CRC ERROR!")
-			elif sps.read_measured_values() == sps.MEASURED_VALUES_ERROR:
-				raise Exception("MEASURED VALUES CRC ERROR!")
-		except Exception as e:
-			raise Exception("SPS30: read_data_ready_flag raised exception: %s", e)		
+		logging.debug('Reading SPS30 data')		
+		# if not sps.read_data_ready_flag():
+		# 	print(sps.read_data_ready_flag())
+		# 	raise Exception("SPS30: read_data_ready_flag raised exception")		
 ## SPS30
 
 		# Set display

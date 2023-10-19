@@ -17,7 +17,7 @@ bus = 1
 addressT6713 = 0x15
 I2C_SLAVE=0x0703
 
-class i2c(object):
+class i2c_6713(object):
 	def __init__(self, device, bus):
 
 		self.fr = io.open("/dev/i2c-"+str(bus), "rb", buffering=0)
@@ -40,9 +40,10 @@ class i2c(object):
 
 class T6713(object):
 	def __init__(self):
-		self.dev = i2c(addressT6713, bus)
+		self.dev = i2c_6713(addressT6713, bus)
 
 	def status(self):
+		# logging.debug('Running function:'+inspect.stack()[0][3])
 		buffer = array.array('B', [0x04, 0x13, 0x8a, 0x00, 0x01])
 		self.dev.write(buffer)
 		time.sleep(0.1)
@@ -50,15 +51,39 @@ class T6713(object):
 		buffer = array.array('B', data)
 		return buffer[2]*256+buffer[3]
 
+	def send_cmd(self, cmd):
+		buffer = array.array('B', cmd)
+		self.dev.write(buffer)
+		time.sleep(0.01) # Technically minimum delay is 10ms 
+		data = self.dev.read(5)
+		buffer = array.array('B', data)
+		return buffer
+
+	def reset(self):
+		# logging.debug('Running function:'+inspect.stack()[0][3])
+		buffer = array.array('B', [0x04, 0x03, 0xe8, 0x00, 0x01])
+		self.dev.write(buffer)
+		time.sleep(0.01)
+		data = self.dev.read(5)
+		buffer = array.array('B', data)
+		cmd_result = 1
+		if ((buffer[2] == 0xe8) & (buffer[3] == 0xff) & (buffer[4] == 0x00)): cmd_result = 0 
+		return buffer
+
 	def gasPPM(self):
+		# logging.debug('Running function:'+inspect.stack()[0][3])
 		buffer = array.array('B', [0x04, 0x13, 0x8b, 0x00, 0x01])
 		self.dev.write(buffer)
 		time.sleep(0.1)
 		data = self.dev.read(4)
 		buffer = array.array('B', data)
-		return buffer[2]*256+buffer[3]
+		ret_value = int((((buffer[2] & 0x3F) << 8) | buffer[3]))
+		# logging.info("Read gasPPM ("+str(ret_value)+")")
+		return ret_value
+		#return buffer[2]*256+buffer[3]
 
 	def checkABC(self):
+		# logging.debug('Running function:'+inspect.stack()[0][3])
 		buffer = array.array('B', [0x04, 0x03, 0xee, 0x00, 0x01])
 		self.dev.write(buffer)
 		time.sleep(0.1)
@@ -67,6 +92,7 @@ class T6713(object):
 		return buffer[2]*256+buffer[3]
 
 	def calibrate(self):
+		# logging.debug('Running function:'+inspect.stack()[0][3])
 		buffer = array.array('B', [0x05, 0x03, 0xec, 0xff, 0x00])
 		self.dev.write(buffer)
 		time.sleep(0.1)
@@ -74,16 +100,8 @@ class T6713(object):
 		buffer = array.array('B', data)
 		return buffer[3]*256+buffer[3]
 
-	def send_cmd(self, cmd):
-		buffer = array.array('B', cmd)
-		self.dev.write(buffer)
-		time.sleep(0.01)
-		data = self.dev.read(5)
-		buffer = array.array('B', data)
-		return buffer
-
-if __name__ == "__main__":
-	obj = T6713()
-	print("Status: ", bin(obj.status()))
-	print("PPM: ", obj.gasPPM())
-	print("ABC State: ", obj.checkABC())
+# if __name__ == "__main__":
+# 	obj = T6713()
+# 	print("Status: ", bin(obj.status()))
+# 	print("PPM: ", obj.gasPPM())
+# 	print("ABC State: ", obj.checkABC())
