@@ -36,9 +36,7 @@ cd Adafruit_Python_SSD1306
 sudo pip3 install Adafruit_SSD1306
 sudo python3 setup.py install
 cd ..
-sudo pip3 install adafruit-circuitpython-shtc3
-sudo pip3 install sps30
-sudo pip3 install smbus2
+sudo pip3 install adafruit-circuitpython-shtc3 sps30 smbus2
 ```
 
 #### Setting up the environment (Script) 
@@ -75,6 +73,10 @@ Pick your preferred editor and add the following line to the crontab file:
 
 Test by rebooting.
 
+## To test the PCB
+
+Run the following command: `sudo python3 test_pcb.py`
+
 ## Links
 - Useful I2C commands: https://www.waveshare.com/wiki/Raspberry_Pi_Tutorial_Series:_I2C
 - T6713 datasheet: http://www.co2meters.com/Documentation/Datasheets/DS-AMP-0002-T6713-Sensor.pdf
@@ -89,3 +91,10 @@ Test by rebooting.
 
 ## Documentation Website
 Our [awesome documentation website](https://liogl.github.io/BlockPenn-Python) was created using [docsify](https://docsify.js.org/#/)
+
+## To "refresh" an RPi
+
+```sh
+sudo apt update
+sudo apt upgrade
+```

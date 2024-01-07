@@ -7,7 +7,7 @@ import Adafruit_SSD1306
 ## SPS30
 import sps30
 ## SPS30
-import DBSETUP  # import the db setup
+#DB import DBSETUP  # import the db setup
 
 from PIL import Image
 from PIL import ImageDraw
@@ -391,7 +391,7 @@ def main():
 		# Write measurements to the DB
 		if (time.time()-db_sample_start > DB_SAMPLE_PERIOD):
 			logging.debug('Writing samples to the DB')
-			saveResults()
+			#DB saveResults()
 			db_sample_start = time.time()
 		
 		# Display image.
