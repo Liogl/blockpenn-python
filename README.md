@@ -1,6 +1,8 @@
 # Blockpenn-python
 Python code for the RPi sensors.
 
+Important: the influxdb writing has been disabled in this version. To enable it, uncomment by removing `#DB` from sensor_start_w_sps_v2.py.
+
 See our [Documentation Website](https://liogl.github.io/blockpenn-python/#/).
 
 ## Installation
