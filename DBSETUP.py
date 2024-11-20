@@ -7,12 +7,14 @@ import logging
 DB_VAR_IP = '127.0.0.1'
 DB_VAR_PORT = 8086
 DB_VAR_USER = 'root'
-DB_VAR_PASS = open('/home/ubuntu/bp_data/node/influxdb_authdata/user_password', 'r').read() #'root'
+DB_VAR_PASS = 'root' #open('/home/ubuntu/bp_data/node/influxdb_authdata/user_password', 'r').read() #'root'
 DB_VAR_DB_NAME = 'db0' #'Meyerson_Deployment'
 
 def createDatabase():
     client = InfluxDBClient(DB_VAR_IP, DB_VAR_PORT, DB_VAR_USER, DB_VAR_PASS, DB_VAR_DB_NAME)
     client.create_database(DB_VAR_DB_NAME)
+    # set retention policy to 30 days
+    client.create_retention_policy(name='30_days', duration='30d', replication=1, database=DB_VAR_DB_NAME, default=True)
     return client
 
 client = createDatabase()

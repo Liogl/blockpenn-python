@@ -1,0 +1,41 @@
+version: '3'
+
+services:
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: influxdb
+    env_file:
+      - influxv2.env
+    volumes:
+      # Mount for influxdb data directory and configuration
+      - ./influxdbv2:/var/lib/influxdb2:rw
+    ports:
+      - "8086:8086"
+  telegraf:
+    image: telegraf:1.30-alpine
+    container_name: telegraf
+    depends_on:
+      - influxdb
+    volumes:
+      # Mount for telegraf config
+      - ./telegraf/mytelegraf.conf:/etc/telegraf/telegraf.conf:ro
+    env_file:
+      - influxv2.env
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+    volumes:
+      - ./grafanadata:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+volumes:
+  influxdbv2:
+  grafana_storage:

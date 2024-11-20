@@ -1,3 +1,8 @@
 /__pycache__
 /bin
 /lib
+/grafana/python/venv
+.env.secret
+.DS_Store
+*/.DS_Store
+*/*/.DS_Store

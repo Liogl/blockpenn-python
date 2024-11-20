@@ -7,7 +7,9 @@ import Adafruit_SSD1306
 ## SPS30
 import sps30
 ## SPS30
-#DB import DBSETUP  # import the db setup
+import DBSETUP  # import the db setup
+import paho.mqtt.client as mqtt
+import json
 
 from PIL import Image
 from PIL import ImageDraw
@@ -53,6 +55,24 @@ cur_panel = 1
 
 # DB
 DB_SAMPLE_PERIOD = 10 # Write the samples to the DB every DB_SAMPLE_PERIOD seconds
+
+# Load MQTT configuration from .env.secret
+from dotenv import dotenv_values
+config = dotenv_values(".env.secret")
+# MQTT configuration
+BROKER = config["BROKER"]
+PORT = config["PORT"]
+TOPIC = config["TOPIC"]
+USERNAME = config["USERNAME"]
+PASSWORD = config["PASSWORD"]
+
+# Make PORT an integer and generate an error if it's not
+try:
+    port_int = int(PORT)
+except ValueError:
+    logging.error("Invalid input. Please enter a valid integer.")
+
+logging.info('MQTT configuration loaded')
 
 # Start the lgpio
 GPIO.setwarnings(False) # Ignore warning (TBD)
@@ -331,6 +351,27 @@ def saveResults():
 	DBSETUP.ganacheLogger(float(sps.dict_values['typical']), "AQ_NC0_TYPICAL", "µm", "MAC_AQ_10", "unit_descrip", "SPS30", "Sensirion")
 ## SPS30
 
+# Prep dataload for the MQTT
+def mqtt_measurement_read():
+	mqtt_data = {
+		"temperature": round(float(temperature), 2),	# Temperature in Celsius
+		"humidity": round(float(relative_humidity), 2),	# Humidity in percentage
+		"co2_concentration": round(float(obj_6713.gasPPM()), 0),	# CO2 concentration in PPM
+		"co2_abc": round(float(obj_6713.checkABC()), 0),	# CO2 ABC state
+		"pm1": round(float(sps.dict_values['pm1p0']), 2),	# PM1 concentration in µg/m³
+		"pm2.5": round(float(sps.dict_values['pm2p5']), 2),	# PM2.5 concentration in µg/m³
+		"pm4": round(float(sps.dict_values['pm4p0']), 2),	# PM4 concentration in µg/m³
+		"pm10": round(float(sps.dict_values['pm10p0']), 2),	# PM10 concentration in µg/m³
+		"nc0.5": round(float(sps.dict_values['nc0p5']), 2),	# NC0.5 concentration in 1/cm³
+		"nc1": round(float(sps.dict_values['nc1p0']), 2),	# NC1 concentration in 1/cm³
+		"nc2.5": round(float(sps.dict_values['nc2p5']), 2),	# NC2.5 concentration in 1/cm³
+		"nc4": round(float(sps.dict_values['nc4p0']), 2),	# NC4 concentration in 1/cm³
+		"nc10": round(float(sps.dict_values['nc10p0']), 2),	# NC10 concentration in 1/cm³
+		"typical_particle": round(float(sps.dict_values['typical']), 2)	# Typical particle size in µm
+	}
+	return mqtt_data
+
+
 # Global vars
 cmd = "hostname -I | cut -d\' \' -f1"
 IP = subprocess.check_output(cmd, shell = True )
@@ -348,7 +389,15 @@ def main():
 	db_sample_start = time.time()
 	panel_start = time.time()
 	str_panel_start = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(panel_start))
-	print(str_panel_start+": main started")
+	logging.info(str_panel_start+": main started")
+	logging.info("Setting the MQTT client")
+	# MQTT client
+	mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+	mqttc.username_pw_set(USERNAME, PASSWORD)
+	mqttc.connect(BROKER, port_int, 60)
+	mqttc.loop_start()
+	logging.info("MQTT client connected")
+
 	while True:
 		# Blink the green led
 		logging.debug('green_led_status'+str(green_led_status))
@@ -391,13 +440,18 @@ def main():
 		# Write measurements to the DB
 		if (time.time()-db_sample_start > DB_SAMPLE_PERIOD):
 			logging.debug('Writing samples to the DB')
-			#DB saveResults()
+			saveResults()
+			logging.info('Sending MQTT data')
+			mqtt_data = mqtt_measurement_read()
+			mqtt_payload = json.dumps(mqtt_data)
+			mqtt_msg_info = mqttc.publish(TOPIC, mqtt_payload, retain=True)
 			db_sample_start = time.time()
-		
 		# Display image.
 		disp.image(image)
 		disp.display()
 		time.sleep(1)
+	mqttc.loop_stop()
+	mqttc.disconnect()
 
 if __name__ == "__main__":
 	try:
@@ -405,5 +459,5 @@ if __name__ == "__main__":
 	except Exception as e:
 		green_led.set_led(0)
 		# red_led.set_led(1)
-		GPIO.cleanup()
+		GPIO.cleanup()		
 		logging.exception("main crashed. Error: %s", e)
