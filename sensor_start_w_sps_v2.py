@@ -440,7 +440,7 @@ def main():
 		# Write measurements to the DB
 		if (time.time()-db_sample_start > DB_SAMPLE_PERIOD):
 			logging.debug('Writing samples to the DB')
-			saveResults()
+			# saveResults() # TODO: enable when allowing database 
 			logging.info('Sending MQTT data')
 			mqtt_data = mqtt_measurement_read()
 			mqtt_payload = json.dumps(mqtt_data)
