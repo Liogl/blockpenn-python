@@ -54,7 +54,7 @@ PANEL_DELAY = 30 # In seconds
 cur_panel = 1
 
 # DB
-DB_SAMPLE_PERIOD = 10 # Write the samples to the DB every DB_SAMPLE_PERIOD seconds
+DB_SAMPLE_PERIOD = 60 # Write the samples to the DB every DB_SAMPLE_PERIOD seconds
 
 # Load MQTT configuration from .env.secret
 from dotenv import dotenv_values
@@ -103,6 +103,11 @@ def button_callback(channel):
 		if (cur_panel > 0): cur_panel = (cur_panel-1) % PANEL_NUM
 		else : cur_panel = PANEL_NUM - 1
 	if channel == RBTN_PIN: cur_panel = (cur_panel+1) % PANEL_NUM
+
+# Celsius to Fahrenheit
+def celsius_to_fahrenheit(celsius):
+    fahrenheit = (celsius * 9/5) + 32
+    return fahrenheit
 
 # Set the leds & btns
 logging.info('Setting leds and buttons')
@@ -354,7 +359,7 @@ def saveResults():
 # Prep dataload for the MQTT
 def mqtt_measurement_read():
 	mqtt_data = {
-		"temperature": round(float(temperature), 2),	# Temperature in Celsius
+		"temperature": round(celsius_to_fahrenheit(float(temperature)), 2),	# Temperature in Fahrenheit
 		"humidity": round(float(relative_humidity), 2),	# Humidity in percentage
 		"co2_concentration": round(float(obj_6713.gasPPM()), 0),	# CO2 concentration in PPM
 		"co2_abc": round(float(obj_6713.checkABC()), 0),	# CO2 ABC state
