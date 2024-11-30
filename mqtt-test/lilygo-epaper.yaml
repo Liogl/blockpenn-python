@@ -1,0 +1,665 @@
+substitutions:
+  name: esphome-web-39b2a0
+  friendly_name: "Lilygo 4.7 Epaper Cur"
+  run_time: 5min #can be as long as needed to get data 
+  sleep_time: 20min # normal sleep time
+  night_sleep_time: 6h # 1st sleep time after midnight
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  min_version: 2024.6.0
+  name_add_mac_suffix: false
+  project:
+    name: esphome.web
+    version: dev
+  includes:
+    - bar_chart.h
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret 39b2a0_api_enc_key
+
+ota:
+  - platform: esphome
+    password: !secret 39b2a0_ota_pass
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Lilygo-Epaper Fallback Hotspot"
+    password: !secret 39b2a0_wifi_ap_pass
+
+deep_sleep:
+  run_duration: ${run_time} 
+  sleep_duration: ${sleep_time}
+  id: deep_sleep_1
+  esp32_ext1_wakeup:
+    pins: GPIO34
+    mode: ALL_LOW
+
+captive_portal:
+
+# Sets up Bluetooth LE (Only on ESP32) to allow the user
+# to provision wifi credentials to the device.
+# esp32_improv:
+#   authorizer: none
+
+# To have a "next url" for improv serial
+web_server:
+
+sun:
+  latitude: 40.0392°
+  longitude: -75.1779°
+
+time:
+  - platform: homeassistant
+    id: ntp
+    timezone: America/New_York
+    on_time_sync:
+      - then:
+        - component.update: sunrise
+        - component.update: sunset
+
+external_components:
+  # - source:
+  #     type: git
+  #     url: https://github.com/kaweksl/esphome
+  #     ref: dev
+  #   components:
+  #     - lilygo_t5_47_battery 
+  #     - lilygo_t5_47_display
+  source:
+    type: local
+    path: components/
+  components: ["t547"]
+
+script:
+  - id: all_data_received
+    then:
+      - component.update: batt_volt
+      - component.update: batt
+      - component.update: t5_display
+#       - script.execute: enter_sleep     # deep sleep - uncomment to enable
+
+  - id: enter_sleep
+    then:
+      - if:
+          condition:
+            lambda: |- 
+              auto time = id(ntp).now();
+              if (!time.is_valid()) { 
+                return false;
+              }
+              return (time.hour < 6); 
+          then:
+            - logger.log: "It's nighttime, entering long sleep for ${night_sleep_time}"          
+            - deep_sleep.enter: 
+                id: deep_sleep_1 
+                sleep_duration: ${night_sleep_time}
+          else:
+            - logger.log: "It's daytime, entering short sleep for ${sleep_time}"             
+            - deep_sleep.enter: 
+                id: deep_sleep_1 
+                sleep_duration: ${sleep_time}
+
+sensor:
+  - platform: homeassistant
+    entity_id: sensor.esphome_web_5cda5c_co2
+    id: airq1_co2
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.esphome_web_5cda5c_pm_1
+    id: airq1_pm1
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.esphome_web_5cda5c_temperature
+    id: airq1_temp
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.esphome_web_5cda5c_humidity
+    id: airq1_humi
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_ju09_carbon_dioxide
+    id: anna_co2
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_ju09_temperature
+    id: anna_temp
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_ju09_pm1
+    id: anna_pm1
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_ju09_humidity
+    id: anna_humi
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_wxhq_carbon_dioxide
+    id: down_co2
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_wxhq_temperature
+    id: down_temp
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_wxhq_pm1
+    id: down_pm1
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.airvisual_pro_wxhq_humidity
+    id: down_humi
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.co2_concentration
+    id: basement_co2
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.humidity
+    id: basement_humi
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.temperature
+    id: basement_temp
+    internal: True
+
+  - platform: homeassistant
+    entity_id: sensor.pm1_0
+    id: basement_pm1
+    internal: True
+
+  - platform: adc
+    pin: GPIO36
+    name: "${name} Battery Voltage"
+    id: batt_volt
+    attenuation: 11db
+    update_interval: never
+    filters:
+      - multiply: 2
+
+  - platform: template
+    name: "${name} Battery"
+    id: batt
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    device_class: battery
+    lambda: |-
+      int y = (1-(4.1-id(batt_volt).state)/(4.1-3.3))*100;
+      if (y < 100) {return y;} else {return 100;};
+    update_interval: never
+
+binary_sensor:
+  - platform: gpio
+    pin: 
+      number: GPIO39
+      inverted: true
+    name: "lilygo-t5 Button 4"
+    on_press:
+      then:
+        - component.update: t5_display
+
+text_sensor:
+  - platform: sun
+    id: sunrise
+    name: Sun Next Sunrise
+    type: sunrise
+    format: "%H:%M"
+    internal: true
+  - platform: homeassistant
+    id: moon
+    entity_id: sensor.moon
+    internal: true
+  - platform: sun
+    id: sunset
+    name: Sun Next Sunset
+    type: sunset
+    format: "%H:%M"    
+    internal: true
+  - platform: homeassistant
+    entity_id: calendar.nevnapok
+    attribute: message
+    id: nevnap
+    internal: true
+  - platform: homeassistant
+    entity_id: sun.sun
+    id: hasun
+    internal: true
+  - platform: homeassistant
+    entity_id: weather.forecast_home
+    id: fc_weather
+    internal: true
+    on_value: # Actions to perform once data for the last sensor has been received
+      then:
+        - script.execute: all_data_received     
+
+font:
+  # - file: "fonts/OpenSans-Medium.ttf"
+  #   id: font_small
+  #   size: 28    
+  #   glyphs: |-
+  #     !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű
+  - file: "fonts/OpenSans-Medium.ttf"
+    id: font_medium
+    size: 38
+    glyphs: |-
+      !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű³µ
+  - file: "fonts/OpenSans-Bold.ttf"
+    id: font_medium_bold
+    size: 38
+    glyphs: |-
+      !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű³µ
+  - file: "fonts/OpenSans-Medium.ttf"
+    id: font_footer
+    size: 28
+    glyphs: |-
+      !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű³µ
+  - file: "fonts/OpenSans-Medium.ttf"
+    id: font_sm
+    size: 32
+    glyphs: |-
+      !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű³µ
+  # - file: "fonts/OpenSans-Medium.ttf"
+  #   id: font_big
+  #   size: 48
+  #   glyphs: |-
+  #     !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű
+  # - file: "fonts/OpenSans-Medium.ttf"
+  #   id: font_large
+  #   size: 56
+  #   glyphs: |-
+  #     !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű
+  # - file: "fonts/OpenSans-Bold.ttf"
+  #   id: font_xlarge_bold
+  #   size: 72
+  #   glyphs: |-
+  #     !"%()+=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz'/&|ÁÉÍÓÖŐÚÜŰáéíóöőúüű
+  # material UI icons - from https://pictogrammers.github.io/@mdi/font/5.3.45/
+  - file: 'fonts/materialdesignicons-webfont.ttf'
+    id: wt_font
+    size: 130
+    glyphs:
+      - "\U000F0594" # clear-night
+      - "\U000F0590" # cloudy
+      - "\U000F0591" # fog
+      - "\U000F0592" # hail
+      - "\U000F0593" # lightning
+      - "\U000F067E" # lightning-rainy
+      - "\U000F0F31" # night-partly-cloudy
+      - "\U000F0595" # partly-cloudy
+      - "\U000F0596" # pouring
+      - "\U000F0597" # rainy
+      - "\U000F0F36" # snowy
+      - "\U000F067F" # snowy-rainy
+      - "\U000F0599" # sunny
+      - "\U000F059D" # windy
+      - "\U000F059E" # windy-variant
+      - "\U000F0F38" # exCentereptional
+      - "\U000F0F61" # moon-first-quarter
+      - "\U000F0F62" # moon-full
+      - "\U000F0F63" # moon-last-quarter
+      - "\U000F0F64" # moon-new
+      - "\U000F0F65" # moon-waning-crescent
+      - "\U000F0F66" # moon-waning-gibbous
+      - "\U000F0F67" # moon-waxing-crescent
+      - "\U000F0F68" # moon-waxing-gibbous
+  - file: 'fonts/materialdesignicons-webfont.ttf'
+    id: font_icons_small
+    size: 56
+    glyphs:
+      # signal 
+      - "\U000F08BF" # signal-0
+      - "\U000F08BC" # signal-1
+      - "\U000F08BD" # signal-2
+      - "\U000F08BE" # signal-3
+      - "\U000F060A" # signal-antenna
+      # weather
+      - "\U000F0594" # clear-night
+      - "\U000F0590" # cloudy
+      - "\U000F0591" # fog
+      - "\U000F0592" # hail
+      - "\U000F0593" # lightning
+      - "\U000F067E" # lightning-rainy
+      - "\U000F0F31" # night-partly-cloudy
+      - "\U000F0595" # partly-cloudy
+      - "\U000F0596" # pouring
+      - "\U000F0597" # rainy
+      - "\U000F0F36" # snowy
+      - "\U000F067F" # snowy-rainy
+      - "\U000F0599" # sunny
+      - "\U000F059D" # windy
+      - "\U000F059E" # windy-variant
+      - "\U000F0F38" # exceptional
+      # moon phases
+      - "\U000F0F61" # moon-first-quarter
+      - "\U000F0F62" # moon-full
+      - "\U000F0F63" # moon-last-quarter
+      - "\U000F0F64" # moon-new
+      - "\U000F0F65" # moon-waning-crescent
+      - "\U000F0F66" # moon-waning-gibbous
+      - "\U000F0F67" # moon-waxing-crescent
+      - "\U000F0F68" # moon-waxing-gibbous
+      # other icons
+      - "\U000F10C2" # Temperature High
+      - "\U000F10C3" # Temperature Low
+      - "\U000F054B" # umbrella
+      - "\U000F02E3" # Bed
+      - "\U000F064D" # human-male
+      - "\U000F0649" # human-female
+      - "\U000F04B9" # sofa
+      - "\U000F04DB" # stop
+      - "\U000F040A" # play
+      - "\U000F03E4" # pause
+      - "\U000F0643" # man
+      - "\U000F1078" # woman
+      - "\U000F0E7C" # baby-face
+  - file: 'fonts/materialdesignicons-webfont.ttf'
+    id: font_icons_tiny
+    size: 32
+    glyphs:
+      - "\U000F005E" # arrow-up-thick
+      - "\U000F0046" # arrow-down-thick
+      - "\U000F059C" # Sunrise
+      - "\U000F059B" # Sunset
+# Reference code: https://gist.github.com/bastnic/c68098ee324522d5ed9011c2cfcb19fd 
+display:
+  - platform: t547
+    # full_update_every: 2 # optional (default:  1): 0 - never, 1 (default) - every, 2+ - throttled
+    #cycles_render: 20    # optional (default: 20): higher number -> less ghosting, crisper image, more time
+    #cycles_invert: 20    # optional (default: 20): higher number -> more timef or full update, but mor burn-in protection
+    id: t5_display
+    rotation: 270
+    update_interval: never
+    # update_interval: 60s
+    lambda: |-
+      // icon constants
+      #define ICON_signal_0         "\U000F08BF" 
+      #define ICON_signal_1         "\U000F08BC"
+      #define ICON_signal_2         "\U000F08BD"
+      #define ICON_signal_3         "\U000F08BE"
+      #define ICON_signal_antenna   "\U000F060A"
+      #define ICON_temp_high        "\U000F10C2"
+      #define ICON_temp_low         "\U000F10C3"
+      #define ICON_umbrella         "\U000F054B"
+      #define ICON_bed              "\U000F02E3"
+      #define ICON_human_male       "\U000F064D"
+      #define ICON_human_female     "\U000F0649"
+      #define ICON_sofa             "\U000F04B9"
+      #define ICON_man              "\U000F0643"
+      #define ICON_woman            "\U000F1078"
+      #define ICON_baby             "\U000F0E7C"
+      #define ICON_up               "\U000F005E"
+      #define ICON_down             "\U000F0046"
+      #define ICON_sunrise          "\U000F059C"
+      #define ICON_sunset           "\U000F059B"
+      #define ICON_play             "\U000F040A"
+      // positioning constants
+      #define xRes 960
+      #define yRes 540
+      #define xCenter (xRes/2 + 40) // X position center
+      #define pad 10
+      #define celsiusSuperscript 12
+      #define rowHeight 75
+      #define temperatureCol 195
+      #define humidityCol 300
+      #define weatherCol 120
+      #define weatherTempCorr 15
+
+      #define xres 540 
+      #define yres 960
+      #define x_pad 10 // border padding
+      #define y_pad 10 // border padding      
+      #define cat_pad 50 // padding before category
+      #define val_pad 50 // padding before value
+      #define icon_pad 35 //padding after icons      
+      #define x1n 20 //x position 1st column name
+      #define x1v 25 //x position 1st column value
+      #define x1i 50 //x position 1st column icon
+      #define x2n xres/3 //x position 2nd column name
+      #define x2v xres/3 //x position 2nd column value
+      #define x2i xres/3 //x position 1st column icon
+      #define x3v 2*xres/3 //x position 2nd column value
+
+      #define x_btn 60 // button area
+      #define y_b0 250
+      #define y_b1 320
+      #define y_b2 388
+      #define y_b3 458
+      #define y_ref 525
+      #define btn_rec_pad 60
+
+      // Weather settings
+      #define weather_icon_x 20
+      #define weather_h 80
+
+      // Bar chart
+      #define bar_w_x 500
+
+      // Playing with shades of gray
+      int color_val = 128/8;
+      auto c11 = Color(color_val,color_val,color_val);
+      auto c12 = Color(color_val*2,color_val*2,color_val*2);
+      auto c13 = Color(color_val*3,color_val*3,color_val*3);
+      auto c14 = Color(color_val*4,color_val*4,color_val*4);
+      auto c15 = Color(color_val*5,color_val*5,color_val*5);
+      auto c16 = Color(color_val*6,color_val*6,color_val*6);
+      auto c17 = Color(color_val*7,color_val*7,color_val*7);
+      auto c18 = Color(color_val*8,color_val*8,color_val*8);
+
+      // Status box with gradient-like appearance
+      int box_width = 40;
+      int box_height = 40;
+      int x1 = 10;
+      int y1 = 800;
+
+      y1+=+box_height+10;
+
+      //it.filled_rectangle(x1, y1, box_width, box_height, c11);
+      //it.filled_rectangle(x1 + box_width, y1, box_width, box_height, c12);
+      //it.filled_rectangle(x1 + box_width*2, y1, box_width, box_height, c13);
+      //it.filled_rectangle(x1 + box_width*3, y1, box_width, box_height, c14);
+      //it.filled_rectangle(x1 + box_width*4, y1, box_width, box_height, c15);
+      //it.filled_rectangle(x1 + box_width*5, y1, box_width, box_height, c16);
+      //it.filled_rectangle(x1 + box_width*6, y1, box_width, box_height, c17);
+      //it.filled_rectangle(x1 + box_width*7, y1, box_width, box_height, c18);
+      // -- end of gray play
+
+      // helper variables
+      int y = 0;
+
+      // Buttons
+      int cur_page = 0;
+      it.filled_rectangle(xres-x_btn-x_pad, y_b0-btn_rec_pad/2, x_btn, y_b1-y_b0-btn_rec_pad/2, c13);
+      it.rectangle(xres-x_btn-x_pad, y_b0-btn_rec_pad/2, x_btn+x_pad, y_ref-y_b0+btn_rec_pad/2+y_pad, c15);
+      it.printf(xres-x_btn, y_b0, id(font_footer), TextAlign::BASELINE_LEFT, "B0");
+      it.printf(xres-x_btn, y_b1, id(font_footer), TextAlign::BASELINE_LEFT, "B1");
+      it.printf(xres-x_btn, y_b2, id(font_footer), TextAlign::BASELINE_LEFT, "B2");
+      it.printf(xres-x_btn, y_b3, id(font_footer), TextAlign::BASELINE_LEFT, "B3");
+      it.printf(xres-x_btn, y_ref, id(font_footer), TextAlign::BASELINE_LEFT, "Ref");
+
+      // Wifi
+      // Function to convert RSSI to signal bars (0-3)
+      int wifi_rssi_val = wifi::global_wifi_component->wifi_rssi();
+      auto signal_str = ICON_signal_3;
+
+      if (isnan(wifi_rssi_val)) {signal_str = ICON_signal_0;}
+      else if (wifi_rssi_val == 0) {signal_str = ICON_signal_0;}
+      else if (wifi_rssi_val >= -55) {signal_str = ICON_signal_3;}  // Excellent: -55dBm or higher
+      else if (wifi_rssi_val >= -66) {signal_str = ICON_signal_2;}  // Good: -66dBm to -56dBm
+      else if (wifi_rssi_val >= -77) {signal_str = ICON_signal_1;}  // Fair: -77dBm to -67dBm
+      else {signal_str = ICON_signal_0;}                            // Poor: less than -77dBm
+
+      it.printf(x_pad/2, y_pad, id(font_icons_small), TextAlign::TOP_LEFT, "%s%s",ICON_signal_antenna, signal_str);
+      it.printf((x_pad*2)+(58*2), y_pad, id(font_footer), TextAlign::TOP_LEFT, "(%ddB)", wifi_rssi_val);
+
+      y+= y_pad;
+      y+= val_pad+10;
+      // time
+      auto time = id(ntp).now();
+      auto dayTime = id(hasun).state == "above_horizon";
+      // it.strftime(pad, 0, id(font_xlarge_bold), TextAlign::TOP_LEFT, "%H:%M", time);
+      // date + nameday
+      it.strftime(xres/2, y, id(font_medium_bold), TextAlign::TOP_CENTER, "%A %m/%d/%Y", time);
+
+      y+=cat_pad;
+
+      // weather
+      y+=cat_pad;
+      it.printf(x1n, y, id(font_medium_bold), TextAlign::TOP_LEFT, "Weather");
+      y+= val_pad;
+
+      //Weather forecast Icon
+      if (id(fc_weather).state == "clear-night") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0594");}
+      if (id(fc_weather).state == "cloudy") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0590");}
+      if (id(fc_weather).state == "partlycloudy") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0595");}
+      if (id(fc_weather).state == "fog") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0591");}
+      if (id(fc_weather).state == "hail") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0592");}
+      if (id(fc_weather).state == "lightning") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0593");}
+      if (id(fc_weather).state == "lightning-rainy") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F067E");}
+      if (id(fc_weather).state == "pouring") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0596");}
+      if (id(fc_weather).state == "rainy") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0597");}
+      if (id(fc_weather).state == "snowy") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F36");}
+      if (id(fc_weather).state == "snowy-rainy") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F067F");}
+      if (id(fc_weather).state == "sunny") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0599");}
+      if (id(fc_weather).state == "windy") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F059D");}
+      if (id(fc_weather).state == "windy-variant") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F059E");}
+      if (id(fc_weather).state == "exceptional") {
+      it.printf(weather_icon_x, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F38");} 
+
+      // moon phase
+      // moon phase
+      if (id(moon).has_state()) {
+        std::map<std::string, std::string> moon_icon_map
+        {
+          {"new_moon", "\U000F0F64"},
+          {"full_moon", "\U000F0F62"},
+          {"waxing_crescent", "\U000F0F67"},
+          {"first_quarter", "\U000F0F61"},
+          {"waxing_gibbous", "\U000F0F68"},
+          {"waning_gibbous", "\U000F0F66"},
+          {"lightning-rainy", "\U000F067E"},
+          {"last_quarter", "\U000F0F63"},
+          {"waning_crescent", "\U000F0F65"},
+        };
+          it.printf(weather_icon_x+weather_h+weather_h, y, id(wt_font), TextAlign::TOP_LEFT, moon_icon_map[id(moon).state.c_str()].c_str());
+      }
+
+      if (id(fc_weather).state == "moon-first-quarter") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F61");}
+      if (id(fc_weather).state == "moon-full") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F62");}
+      if (id(fc_weather).state == "moon-last-quarter") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F63");}
+      if (id(fc_weather).state == "moon-new") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F64");}
+      if (id(fc_weather).state == "moon-waning-crescent") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F65");}
+      if (id(fc_weather).state == "moon-waning-gibbous") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F66");}
+      if (id(fc_weather).state == "moon-waxing-crescent") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F67");}
+      if (id(fc_weather).state == "moon-waxing-gibbous") {
+      it.printf(weather_icon_x+50, y, id(wt_font), TextAlign::TOP_LEFT, "\U000F0F68");}      
+
+      y+=weather_h;
+
+      // TODO it.printf(x1n, y, id(font_medium), TextAlign::BASELINE_LEFT, "%s", id(weather_fc_3h).state.c_str());
+      // it.strftime(xRes - pad - 55, pad, id(font_medium_bold), TextAlign::TOP_RIGHT, dateFormat.c_str(), time);
+
+      // Sensors readings
+      y+=cat_pad;
+      it.printf(x1n, y, id(font_medium_bold), TextAlign::TOP_LEFT, "Office");
+      it.printf(x3v-75, y+5, id(font_sm), TextAlign::TOP_LEFT, "%.1f µg/m³", id(airq1_pm1).state);
+      y+= val_pad;      
+      it.printf(x1v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f ppm", id(airq1_co2).state);
+      it.printf(x2v+30, y, id(font_sm), TextAlign::TOP_LEFT, "%.1f °F", id(airq1_temp).state);
+      it.printf(x3v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f %%", id(airq1_humi).state);
+
+      y+=cat_pad;
+      it.printf(x1n, y, id(font_medium_bold), TextAlign::TOP_LEFT, "Anna's Room");
+      it.printf(x3v-75, y+5, id(font_sm), TextAlign::TOP_LEFT, "%.1f µg/m³", id(anna_pm1).state);
+      y+= val_pad;      
+      it.printf(x1v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f ppm", id(anna_co2).state);
+      it.printf(x2v+30, y, id(font_sm), TextAlign::TOP_LEFT, "%.1f °F", id(anna_temp).state);
+      it.printf(x3v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f %%", id(anna_humi).state);
+
+      y+=cat_pad;
+      it.printf(x1n, y, id(font_medium_bold), TextAlign::TOP_LEFT, "Living Room");
+      it.printf(x3v-75, y+5, id(font_sm), TextAlign::TOP_LEFT, "%.1f µg/m³", id(down_pm1).state);
+      y+= val_pad;      
+      it.printf(x1v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f ppm", id(down_co2).state);
+      it.printf(x2v+30, y, id(font_sm), TextAlign::TOP_LEFT, "%.1f °F", id(down_temp).state);
+      it.printf(x3v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f %%", id(down_humi).state);
+
+      y+=cat_pad; 
+      it.printf(x1n, y, id(font_medium_bold), TextAlign::TOP_LEFT, "Basement");
+      it.printf(x3v-75, y+5, id(font_sm), TextAlign::TOP_LEFT, "%.1f µg/m³", id(basement_pm1).state);
+      y+= val_pad;      
+      it.printf(x1v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f ppm", id(basement_co2).state);
+      it.printf(x2v+30, y, id(font_sm), TextAlign::TOP_LEFT, "%.1f °F", id(basement_temp).state);
+      it.printf(x3v, y, id(font_sm), TextAlign::TOP_LEFT, "%.0f %%", id(basement_humi).state);
+
+      y+=cat_pad;
+      it.rectangle(x1, y, xres-x_btn-x1-2*x_pad, box_height, c12);
+
+      // Bar chart
+      y+=cat_pad;
+      std::vector<float> example_data = {45.5, 62.3, 33.7, 55.1, 41.2};
+      custom_display::draw_bar_chart(it, x1, y, bar_w_x, 100, example_data, 100.0, esphome::Color(96, 96, 96), esphome::Color(64, 64, 64));
+      //  esphome::display::Display &it,  // Changed from pointer to reference 
+      //  int x, 
+      //  int y, 
+      //  int width, 
+      //  int height, 
+      //  std::vector<float> data, 
+      //  float max_value, 
+      //  esphome::Color bar_color_even = esphome::Color(32, 32, 32), 
+      //  esphome::Color bar_color_odd = esphome::Color(64, 64, 64)
+
+      // Footer
+      it.strftime(x_pad, yres-y_pad/2, id(font_footer), TextAlign::BASELINE_LEFT, "Updated: %H:%M", id(ntp).now());
+      it.printf(xres-x_pad, yres-y_pad/2, id(font_footer), TextAlign::BASELINE_RIGHT, "%.2fV/%.0f%%", id(batt_volt).state, id(batt).state);
+
+
+
