@@ -31,13 +31,12 @@ LBTN_PIN = 4 # Bottom, pull-down
 RBTN_PIN = 27 # Into the center of the PCB, pull-down
 
 # Set all legacy loggers to ERROR
-# Get the root logger
-root_logger = logging.getLogger()
-
-# Iterate over all loggers
-for logger_name in logging.root.manager.loggerDict:
-	logger = logging.getLogger(logger_name)
-	logger.setLevel(logging.ERROR)
+def disable_loggers():
+	for logger_name in logging.root.manager.loggerDict:
+		logger = logging.getLogger(logger_name)
+		logger.setLevel(logging.ERROR)
+	logger = logging.getLogger('MyLogger')
+	logger.setLevel(logging.DEBUG)
 
 # Start logging
 log_fname = os.path.splitext(os.path.basename(__file__))[0]+".log"
@@ -280,6 +279,9 @@ def test_oled():
 	RST = None     # on the PiOLED this pin isnt used
 	# 128x64 display with hardware I2C:
 	disp = Adafruit_SSD1306.SSD1306_128_64(rst=RST)
+
+	disable_loggers()
+
 	# Initialize library.
 	try:
 		disp.begin()
