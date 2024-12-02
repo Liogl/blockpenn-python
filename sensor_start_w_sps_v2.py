@@ -34,6 +34,19 @@ log_level = logging.DEBUG
 logger = logging.getLogger('MyLogger')
 logger.setLevel(log_level)
 
+# Cleaning the log
+for handler in logging.root.handlers[:]:
+	logging.root.removeHandler(handler)
+
+# class CustomFilter(logging.Filter):
+# 	def filter(self, record):
+# 		if record.levelno == logging.DEBUG and (record.msg.startswith("Wrote to register 0x40") or record.msg.endswith("to register 0x00")):
+# 			return False
+# 		return True
+
+# # Add the custom filter to the logger
+# logger.addFilter(CustomFilter())
+
 # Adding rotating log
 log_handler = logging.handlers.RotatingFileHandler(
 	log_fname,
@@ -387,16 +400,6 @@ def on_log(client, userdata, paho_log_level, messages):
 		logging.warning(f"MQTT warning: {messages}")
 	else:
 		logging.debug(f"MQTT logger: {messages}")
-
-# Cleaning the log
-class CustomFilter(logging.Filter):
-	def filter(self, record):
-		if record.levelno == logging.DEBUG and record.msg.startswith("Wrote to register 0x40"):
-			return False
-		return True
-
-# Add the custom filter to the logger
-logger.addFilter(CustomFilter())
 
 # Global vars
 cmd = "hostname -I | cut -d\' \' -f1"
