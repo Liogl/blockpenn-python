@@ -380,6 +380,14 @@ def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code.is_failure:
         logging.error(f"Failed to connect: {reason_code}. loop_forever() will retry connection")
 
+def on_log(client, userdata, paho_log_level, messages):
+	if paho_log_level == mqtt.MQTT_LOG_ERR:
+		logging.error(f"MQTT error: {messages}")
+	elif paho_log_level == mqtt.MQTT_LOG_WARNING:
+		logging.warning(f"MQTT warning: {messages}")
+	else:
+		logging.debug(f"MQTT logger: {messages}")
+
 # Global vars
 cmd = "hostname -I | cut -d\' \' -f1"
 IP = subprocess.check_output(cmd, shell = True )
@@ -402,6 +410,7 @@ def main():
 	# MQTT client
 	mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 	mqttc.on_connect = on_connect
+	mqttc.on_log = on_log
 	mqttc.username_pw_set(USERNAME, PASSWORD)
 	mqttc.connect(BROKER, port_int, 60)
 	mqttc.loop_start()
