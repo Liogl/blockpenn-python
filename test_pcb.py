@@ -30,6 +30,15 @@ LED2_PIN = 23 # green
 LBTN_PIN = 4 # Bottom, pull-down
 RBTN_PIN = 27 # Into the center of the PCB, pull-down
 
+# Set all legacy loggers to ERROR
+# Get the root logger
+root_logger = logging.getLogger()
+
+# Iterate over all loggers
+for logger_name in logging.root.manager.loggerDict:
+	logger = logging.getLogger(logger_name)
+	logger.setLevel(logging.ERROR)
+
 # Start logging
 log_fname = os.path.splitext(os.path.basename(__file__))[0]+".log"
 log_level = logging.DEBUG
