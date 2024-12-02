@@ -376,6 +376,9 @@ def mqtt_measurement_read():
 	}
 	return mqtt_data
 
+def on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code.is_failure:
+        logging.error(f"Failed to connect: {reason_code}. loop_forever() will retry connection")
 
 # Global vars
 cmd = "hostname -I | cut -d\' \' -f1"
@@ -398,6 +401,7 @@ def main():
 	logging.info("Setting the MQTT client")
 	# MQTT client
 	mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+	mqttc.on_connect = on_connect
 	mqttc.username_pw_set(USERNAME, PASSWORD)
 	mqttc.connect(BROKER, port_int, 60)
 	mqttc.loop_start()
